@@ -39,16 +39,35 @@ export const createCampaign = async (
 };
 
 
-// Get all campaigns
+// Get all campaigns (optionally scoped to a user), with job stats attached
 export const getCampaigns = async (
-  _req: Request,
+  req: Request,
   res: Response
 ) => {
   try {
+    const { userId } = req.query;
+
     const result = await pool.query(
-      `SELECT *
-       FROM campaigns
-       ORDER BY created_at DESC`
+      `SELECT
+         c.*,
+         COALESCE(j.total, 0)::int AS total_jobs,
+         COALESCE(j.sent, 0)::int AS sent_jobs,
+         COALESCE(j.pending, 0)::int AS pending_jobs,
+         COALESCE(j.failed, 0)::int AS failed_jobs
+       FROM campaigns c
+       LEFT JOIN (
+         SELECT
+           campaign_id,
+           COUNT(*) AS total,
+           COUNT(*) FILTER (WHERE status = 'sent') AS sent,
+           COUNT(*) FILTER (WHERE status = 'pending') AS pending,
+           COUNT(*) FILTER (WHERE status = 'failed') AS failed
+         FROM email_jobs
+         GROUP BY campaign_id
+       ) j ON j.campaign_id = c.id
+       WHERE ($1::uuid IS NULL OR c.user_id = $1)
+       ORDER BY c.created_at DESC`,
+      [userId || null]
     );
 
     return res.status(200).json({

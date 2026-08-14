@@ -1,0 +1,36 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: queuelet-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: queuelet
+      POSTGRES_PASSWORD: queuelet123
+      POSTGRES_DB: queuelet
+    ports:
+      - "5434:5432"
+    volumes:
+      - queuelet_pg_data:/var/lib/postgresql/data
+      - ./backend/database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U queuelet -d queuelet"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: queuelet-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  queuelet_pg_data:

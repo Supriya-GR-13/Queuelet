@@ -465,9 +465,27 @@ td strong {
   color: #19955a;
 }
 
-.status.scheduled {
+.status.scheduled,
+.status.pending,
+.status.draft {
   background: #fff1df;
   color: #d87911;
+}
+
+.status.active,
+.status.sent {
+  background: #eaf0ff;
+  color: #315bea;
+}
+
+.status.paused {
+  background: #f1eaff;
+  color: #7a42d6;
+}
+
+.status.failed {
+  background: #fde8e8;
+  color: #d64545;
 }
 
 /* CAMPAIGNS */
