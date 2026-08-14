@@ -1,154 +1,38 @@
-import { useCallback, useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import "./App.css";
-import type { Campaign, Page, User } from "./types";
-import { loginDemoUser } from "./api/users";
-import { fetchCampaigns } from "./api/campaigns";
-import Sidebar from "./components/Sidebar";
-import Topbar from "./components/Topbar";
-import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard";
-import Campaigns from "./pages/Campaigns";
-import CampaignDetail from "./pages/CampaignDetail";
-import CreateCampaign from "./pages/CreateCampaign";
-import Analytics from "./pages/Analytics";
 
-const USER_STORAGE_KEY = "queuelet_user";
+type Campaign = { id:number; name:string; status:string; recipients:number; sent:number; scheduled:string; subject:string };
 
-const PAGE_SUBTITLES: Record<Page, string> = {
-  Dashboard: "Here's what's happening with your campaigns.",
-  Campaigns: "Manage and monitor your email campaigns.",
-  Create: "Create and schedule a new email campaign.",
-  Analytics: "Track your email outreach performance.",
-  Detail: "Campaign details.",
-};
+const initialCampaigns: Campaign[] = [
+  {id:1,name:"Product Launch Outreach",status:"Running",recipients:240,sent:156,scheduled:"Today, 2:30 PM",subject:"Introducing our new product"},
+  {id:2,name:"Q3 Partnership Campaign",status:"Scheduled",recipients:180,sent:0,scheduled:"Tomorrow, 10:00 AM",subject:"Let's partner together"},
+  {id:3,name:"Developer Community",status:"Completed",recipients:320,sent:320,scheduled:"Aug 12, 4:00 PM",subject:"Join the Queuelet community"},
+];
 
-function App() {
-  const [user, setUser] = useState<User | null>(null);
-  const [loginLoading, setLoginLoading] = useState(false);
-  const [loginError, setLoginError] = useState<string | null>(null);
+export default function App(){
+  const [loggedIn,setLoggedIn]=useState(false);
+  const [page,setPage]=useState("Dashboard");
+  const [campaigns,setCampaigns]=useState(initialCampaigns);
+  const [selected,setSelected]=useState<Campaign|null>(null);
+  const [form,setForm]=useState({name:"",recipients:"",subject:"",body:"",scheduled:""});
+  const [toast,setToast]=useState("");
 
-  const [page, setPage] = useState<Page>("Dashboard");
-  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
-
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [campaignsLoading, setCampaignsLoading] = useState(false);
-  const [campaignsError, setCampaignsError] = useState<string | null>(null);
-
-  // Restore a previous demo session from localStorage (there's no real
-  // session/auth backend yet, so this just remembers who was logged in).
-  useEffect(() => {
-    const stored = localStorage.getItem(USER_STORAGE_KEY);
-    if (stored) {
-      try {
-        setUser(JSON.parse(stored));
-      } catch {
-        localStorage.removeItem(USER_STORAGE_KEY);
-      }
-    }
-  }, []);
-
-  const loadCampaigns = useCallback(
-    (userId: string) => {
-      setCampaignsLoading(true);
-      setCampaignsError(null);
-      fetchCampaigns(userId)
-        .then(setCampaigns)
-        .catch(() => setCampaignsError("Failed to load campaigns from the server."))
-        .finally(() => setCampaignsLoading(false));
-    },
-    []
-  );
-
-  useEffect(() => {
-    if (user) loadCampaigns(user.id);
-  }, [user, loadCampaigns]);
-
-  const handleLogin = async (name: string, email: string) => {
-    setLoginLoading(true);
-    setLoginError(null);
-    try {
-      const loggedInUser = await loginDemoUser(name, email);
-      setUser(loggedInUser);
-      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(loggedInUser));
-    } catch (err) {
-      console.error(err);
-      setLoginError(
-        "Couldn't reach the Queuelet API. Make sure the backend is running on localhost:5000."
-      );
-    } finally {
-      setLoginLoading(false);
-    }
+  const stats=useMemo(()=>({total:campaigns.length,sent:campaigns.reduce((a,c)=>a+c.sent,0),scheduled:campaigns.filter(c=>c.status==="Scheduled").length,success:96}),[campaigns]);
+  const notify=(msg:string)=>{setToast(msg);setTimeout(()=>setToast(""),2200)};
+  const create=()=>{
+    if(!form.name||!form.recipients||!form.subject){notify("Please fill campaign name, recipients and subject");return;}
+    const c:Campaign={id:Date.now(),name:form.name,status:"Scheduled",recipients:Number(form.recipients),sent:0,scheduled:form.scheduled||"Tomorrow, 10:00 AM",subject:form.subject};
+    setCampaigns(x=>[c,...x]);setForm({name:"",recipients:"",subject:"",body:"",scheduled:""});setPage("Campaigns");notify("Campaign scheduled successfully ✓");
   };
+  if(!loggedIn) return <div className="login"><div className="login-brand"><b>Q</b><strong>Queuelet</strong></div><div className="login-hero"><div><span className="eyebrow">SMART EMAIL SCHEDULER</span><h1>Reach the right people.<br/><em>At the right time.</em></h1><p>Plan, schedule and monitor your email outreach from one simple workspace.</p><div className="features"><span>✓ Smart scheduling</span><span>✓ Campaign analytics</span><span>✓ Reliable delivery</span></div></div></div><div className="login-card"><div className="mobile-brand"><b>Q</b> Queuelet</div><h2>Welcome back</h2><p>Sign in to manage your campaigns</p><button className="google" onClick={()=>{setLoggedIn(true);notify("Welcome to Queuelet!")}}><span>G</span> Continue with Google</button><div className="or"><i/>or<i/></div><button className="demo" onClick={()=>setLoggedIn(true)}>Continue with Demo Account</button><small>By continuing, you agree to the Queuelet terms and privacy policy.</small></div></div>;
 
-  const handleLogout = () => {
-    setUser(null);
-    setCampaigns([]);
-    localStorage.removeItem(USER_STORAGE_KEY);
-    setPage("Dashboard");
-  };
-
-  const goToDetail = (id: string) => {
-    setSelectedCampaignId(id);
-    setPage("Detail");
-  };
-
-  const backToCampaigns = () => {
-    setSelectedCampaignId(null);
-    setPage("Campaigns");
-    if (user) loadCampaigns(user.id);
-  };
-
-  if (!user) {
-    return <Login onLogin={handleLogin} loading={loginLoading} error={loginError} />;
-  }
-
-  const title = page === "Detail" ? "Campaign" : page;
-
-  return (
-    <div className="app">
-      <Sidebar page={page === "Detail" ? "Campaigns" : page} onNavigate={setPage} onLogout={handleLogout} />
-
-      <main className="main">
-        <Topbar title={title} subtitle={PAGE_SUBTITLES[page]} user={user} />
-
-        {campaignsError && (
-          <p style={{ color: "#d64545", marginBottom: 20 }}>{campaignsError}</p>
-        )}
-
-        {campaignsLoading && page !== "Detail" ? (
-          <p style={{ color: "#8991a1" }}>Loading campaigns…</p>
-        ) : (
-          <>
-            {page === "Dashboard" && (
-              <Dashboard campaigns={campaigns} onNavigate={setPage} />
-            )}
-
-            {page === "Campaigns" && (
-              <Campaigns campaigns={campaigns} onView={goToDetail} />
-            )}
-
-            {page === "Detail" && selectedCampaignId && (
-              <CampaignDetail
-                campaignId={selectedCampaignId}
-                onBack={backToCampaigns}
-                onDeleted={backToCampaigns}
-              />
-            )}
-
-            {page === "Create" && (
-              <CreateCampaign
-                userId={user.id}
-                onNavigate={setPage}
-                onCreated={() => loadCampaigns(user.id)}
-              />
-            )}
-
-            {page === "Analytics" && <Analytics campaigns={campaigns} />}
-          </>
-        )}
-      </main>
-    </div>
-  );
+  const nav=(p:string)=>{setPage(p);setSelected(null)};
+  return <div className="app"><aside><div className="brand"><b>Q</b><strong>Queuelet</strong></div><div className="nav-title">WORKSPACE</div>{[["Dashboard","⌂"],["Campaigns","✉"],["Create","＋"],["Analytics","◔"]].map(([p,icon])=><button key={p} className={page===p?"nav active":"nav"} onClick={()=>nav(p)}><span>{icon}</span>{p}</button>)}<div className="side-bottom"><button className="nav" onClick={()=>{setLoggedIn(false);setPage("Dashboard")}}>↪ <span>Log out</span></button></div></aside><main><header><div><h1>{selected?"Campaign Details":page}</h1><p>{selected?"Review campaign performance and scheduling details.":page==="Dashboard"?"Here's what's happening with your campaigns.":page==="Campaigns"?"Manage and monitor your email campaigns.":page==="Create"?"Create and schedule a new email campaign.":"Track your email outreach performance."}</p></div><div className="profile"><div className="avatar">S</div><div><b>Supriya</b><small>Demo account</small></div></div></header>{toast&&<div className="toast">{toast}</div>}
+{selected?<section><button className="back" onClick={()=>setSelected(null)}>← Back to campaigns</button><div className="detail"><div className="detail-head"><div className="big-icon">✉</div><div><h2>{selected.name}</h2><span className={'status '+selected.status.toLowerCase()}>{selected.status}</span></div></div><div className="detail-grid"><div><small>SUBJECT</small><b>{selected.subject}</b></div><div><small>RECIPIENTS</small><b>{selected.recipients}</b></div><div><small>EMAILS SENT</small><b>{selected.sent}</b></div><div><small>SCHEDULED</small><b>{selected.scheduled}</b></div></div><div className="progress"><span style={{width:`${selected.recipients?selected.sent/selected.recipients*100:0}%`}}/></div><p className="muted">Delivery progress: {selected.sent} of {selected.recipients} emails</p></div></section>
+:page==="Dashboard"?<Dashboard stats={stats} campaigns={campaigns} nav={nav} view={setSelected}/>:page==="Campaigns"?<Campaigns campaigns={campaigns} view={setSelected}/>:page==="Create"?<Create form={form} setForm={setForm} create={create}/>:<Analytics stats={stats} campaigns={campaigns}/>}</main></div>
 }
 
-export default App;
+function Dashboard({stats,campaigns,nav,view}:{stats:any;campaigns:Campaign[];nav:(p:string)=>void;view:(c:Campaign)=>void}){return <><div className="stats">{[["Campaigns",stats.total,"◫","blue"],["Emails Sent",stats.sent,"✉","purple"],["Scheduled",stats.scheduled,"◷","orange"],["Success Rate",stats.success+"%","✓","green"]].map(x=><div className="stat" key={x[0]}><div className={'stat-icon '+x[3]}>{x[2]}</div><div><small>{x[0]}</small><h2>{x[1]}</h2><span>↗ On track</span></div></div>)}</div><div className="section-head"><div><h2>Recent campaigns</h2><p>Your latest email outreach activity</p></div><button className="primary" onClick={()=>nav("Create")}>＋ New Campaign</button></div><div className="table"><table><thead><tr><th>CAMPAIGN</th><th>STATUS</th><th>RECIPIENTS</th><th>SENT</th><th>SCHEDULED</th><th></th></tr></thead><tbody>{campaigns.map(c=><tr key={c.id}><td><b>{c.name}</b><small>{c.subject}</small></td><td><span className={'status '+c.status.toLowerCase()}>{c.status}</span></td><td>{c.recipients}</td><td>{c.sent}</td><td>{c.scheduled}</td><td><button className="link" onClick={()=>view(c)}>View →</button></td></tr>)}</tbody></table></div></>}
+function Campaigns({campaigns,view}:{campaigns:Campaign[];view:(c:Campaign)=>void}){return <><div className="section-head"><div><h2>All campaigns</h2><p>{campaigns.length} campaigns in your workspace</p></div></div><div className="cards">{campaigns.map(c=><div className="card" key={c.id}><div className="card-top"><div className="big-icon">✉</div><span className={'status '+c.status.toLowerCase()}>{c.status}</span></div><h3>{c.name}</h3><p className="muted">{c.subject}</p><div className="info"><span>👥 {c.recipients} recipients</span><span>◷ {c.scheduled}</span></div><div className="progress"><span style={{width:`${c.recipients?c.sent/c.recipients*100:0}%`}}/></div><button className="outline" onClick={()=>view(c)}>View Campaign</button></div>)}</div></>}
+function Create({form,setForm,create}:{form:any;setForm:any;create:()=>void}){return <div className="form-card"><div className="form-title"><h2>Campaign information</h2><p>Set up your recipients, message and schedule.</p></div><div className="form"><label>Campaign name<input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="e.g. Product Launch Outreach"/></label><label>Recipients<input type="number" value={form.recipients} onChange={e=>setForm({...form,recipients:e.target.value})} placeholder="Number of recipients"/></label><label>Email subject<input value={form.subject} onChange={e=>setForm({...form,subject:e.target.value})} placeholder="Enter your email subject"/></label><label>Email body<textarea rows={6} value={form.body} onChange={e=>setForm({...form,body:e.target.value})} placeholder="Write your message..."/></label><label>Schedule<input value={form.scheduled} onChange={e=>setForm({...form,scheduled:e.target.value})} placeholder="Tomorrow, 10:00 AM"/></label><div className="actions"><button className="outline">Save Draft</button><button className="primary" onClick={create}>Schedule Campaign →</button></div></div></div>}
+function Analytics({stats,campaigns}:{stats:any;campaigns:Campaign[]}){return <><div className="analytics">{[["Open Rate","72.4%","+8.2%"],["Click Rate","18.6%","+3.1%"],["Reply Rate","9.8%","+2.4%"],["Bounce Rate","2.1%","-0.8%"]].map(x=><div className="analytic"><small>{x[0]}</small><h2>{x[1]}</h2><span>{x[2]} this month</span></div>)}</div><div className="chart"><h2>Email performance</h2><p>Campaign activity overview</p><div className="bars">{[42,66,51,78,60,88,72,95,67,82,74,92].map((h,i)=><div key={i}><span style={{height:h+"%"}}/></div>)}</div><div className="months"><span>Jan</span><span>Mar</span><span>May</span><span>Jul</span><span>Aug</span></div></div></>}
